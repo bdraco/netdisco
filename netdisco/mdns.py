@@ -7,11 +7,12 @@ import zeroconf
 class MDNS:
     """Base class to discover mDNS services."""
 
-    def __init__(self):
+    def __init__(self, zeroconf_instance=None):
         """Initialize the discovery."""
-        self.zeroconf = None
+        self.zeroconf = zeroconf_instance
+        self._created_zeroconf = False
         self.services = []  # type: List[zeroconf.ServiceInfo]
-        self._browsers = []  # type: List[zeroconf.ServiceBrowser]
+        self._browser = None  # type: zeroconf.ServiceBrowser
 
     def register_service(self, service):
         """Register a mDNS service."""
@@ -20,24 +21,31 @@ class MDNS:
     def start(self):
         """Start discovery."""
         try:
-            self.zeroconf = zeroconf.Zeroconf()
+            if not self.zeroconf:
+                self.zeroconf = zeroconf.Zeroconf()
+                self._created_zeroconf = True
 
-            for service in self.services:
-                self._browsers.append(zeroconf.ServiceBrowser(
-                    self.zeroconf, service.typ, service))
+            def _service_update(*args, **kwargs):
+                return
+
+            types = [service.typ for service in self.services]
+            self._browser = zeroconf.ServiceBrowser(
+                self.zeroconf, types, handlers=[_service_update]
+            )
         except Exception:  # pylint: disable=broad-except
             self.stop()
             raise
 
     def stop(self):
         """Stop discovering."""
-        while self._browsers:
-            self._browsers.pop().cancel()
+        if self._browser:
+            self._browser.cancel()
+            self._browser = None
 
         for service in self.services:
             service.reset()
 
-        if self.zeroconf:
+        if self._created_zeroconf:
             self.zeroconf.close()
             self.zeroconf = None
 
