@@ -1,7 +1,7 @@
 """Add support for discovering mDNS services."""
 from typing import List  # noqa: F401
 
-import zeroconf
+import zeroconf as zc
 
 
 class MDNS:
@@ -22,14 +22,25 @@ class MDNS:
         """Start discovery."""
         try:
             if not self.zeroconf:
-                self.zeroconf = zeroconf.Zeroconf()
+                self.zeroconf = zc.Zeroconf()
                 self._created_zeroconf = True
 
-            def _service_update(*args, **kwargs):
-                return
+            services_by_type = {}
+
+            for service in self.services:
+                services_by_type.setdefault(service.typ, [])
+                services_by_type[service.typ].append(service)
+
+            def _service_update(zeroconf, service_type, name, state_change):
+                if state_change == zc.ServiceStateChange.Added:
+                    for service in services_by_type[service_type]:
+                        service.add_service(zeroconf, service_type, name)
+                elif state_change == zc.ServiceStateChange.Removed:
+                    for service in services_by_type[service_type]:
+                        service.remove_service(zeroconf, service_type, name)
 
             types = [service.typ for service in self.services]
-            self._browser = zeroconf.ServiceBrowser(
+            self._browser = zc.ServiceBrowser(
                 self.zeroconf, types, handlers=[_service_update]
             )
         except Exception:  # pylint: disable=broad-except
